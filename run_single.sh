@@ -131,7 +131,6 @@ if [ "$AGREE_MODE" = true ]; then
     echo -e "${CYAN}[$ALIAS]${NC} Injecting App Preferences (Clova, Navigation tab, High-pass)..."
     APP_UID=$(adb -s "$DEV_ID" shell "su -c 'stat -c %U /data/data/$PKG_NAME'")
     APP_UID=$(echo "$APP_UID" | tr -d '\r\n')
-    
     cat <<EOF > tmp_prefs_$$_$DEV_ID.xml
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
@@ -166,6 +165,7 @@ EOF
     
     adb -s "$DEV_ID" shell "su -c 'chown -R $APP_UID:$APP_UID /data/data/$PKG_NAME/shared_prefs'"
     adb -s "$DEV_ID" shell "su -c 'chmod -R 777 /data/data/$PKG_NAME/shared_prefs'"
+    adb -s "$DEV_ID" shell "su -c 'restorecon -R /data/data/$PKG_NAME/shared_prefs'"
     
     rm -f tmp_prefs_$$_$DEV_ID.xml tmp_navi_$$_$DEV_ID.xml tmp_consent_$$_$DEV_ID.xml
 fi
@@ -201,8 +201,12 @@ adb -s "$DEV_ID" shell "su -c '( /data/local/tmp/frida-server -D >/dev/null 2>&1
 sleep 2
 adb -s "$DEV_ID" forward tcp:$FRIDA_PORT tcp:27042 >/dev/null 2>&1
 
-echo -e "${CYAN}[$ALIAS]${NC} Injecting core survival hooks only..."
-HOOK_OPTS="-l lib/hooks/_core_survival.js -l lib/hooks/network_hook.js"
+echo -e "${CYAN}[$ALIAS]${NC} Selecting hooks based on chipset for system stability..."
+if [[ "$ORIG_MODEL" =~ ^SM-[SGN] ]]; then
+    HOOK_OPTS="-l lib/hooks/_core_survival.js -l lib/hooks/network_hook.js"
+else
+    HOOK_OPTS="-l lib/hooks/survival_light.js -l lib/hooks/network_hook.js"
+fi
 
 FRIDA_LOG="$CAPTURE_LOG_DIR/frida.log"
 nohup frida -H 127.0.0.1:$FRIDA_PORT --runtime=v8 -f "$PKG_NAME" $HOOK_OPTS --no-auto-reload > "$FRIDA_LOG" 2>&1 &
